@@ -46,10 +46,7 @@ int main(){
   for(int x = 0; x < height; ++x){
      // cout << x << " ";
     for (int y = 0; y < width; ++y){
-      if (field[x][y] < 7)
-        cout << field[x][y] << " ";
-      else
-        cout << "#" << " ";;
+      cout << (7 - field[x][y]) << " ";
     }
     cout << endl;
   }
