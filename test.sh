@@ -11,11 +11,13 @@ TimerDiff(){
   echo $(( time - TIMER ))
 }
 
-test(){
-    echo $1
-}
+a=true
+b=5
 
-test ololo tro
+if $a && [[ $b -eq 5 ]]; then
+    echo trololo
+fi
+
 exit 0;
 
 

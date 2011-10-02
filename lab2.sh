@@ -173,7 +173,7 @@ declare -r LAB_PLAYER_RIGHT_CHAR='\e[31;42m >\e[0m'
 declare -r LAB_PLAYER_UP_CHAR='\e[31;42m/\\\e[0m'
 declare -r LAB_PLAYER_DOWN_CHAR='\e[31;42m\\/\e[0m'
 declare -r LAB_MONSTER_CHAR='\e[31;42m@@\e[0m'
-declare -r LAB_SHOT_CHAR='\e[36;42mo \e[0m'
+declare -r LAB_SHOT_CHAR='\e[34;42mo0\e[0m'
 
 declare -r MONSTER_CHAR='\e[37;41m \e[0m'
 declare -r FRONT_WALL_CHAR='\e[37;43m \e[0m'
@@ -198,16 +198,17 @@ declare -ra DIR_X=(-1 0 1 0)
 declare -ra DIR_Y=(0 1 0 -1)
 declare needPrint=true
 
-declare -ra SHOT_CENTER_X=(12 12 13 14 16 17 18)
+declare -ra SHOT_CENTER_X=(18 17 16 14 13 12 12)
+declare -ri SHOT_CENTER_Y=$(( SCREEN_WIDTH / 2 ))
 declare -ra SHOT_RADIUS=(3 2 2 2 1 1 1)
 
 declare -r LEFT_KEY='a'
 declare -r RIGHT_KEY='d'
 declare -r UP_KEY='w'
 declare -r DOWN_KEY='s'
-declare -r FIRE_KEY=' '
+declare -r FIRE_KEY='f'
 
-declare -i -r DELAY=75
+declare -i -r DELAY=20
 
 declare -ri CEIL_BOTTOM=12
 
@@ -245,6 +246,8 @@ DrawMinimap(){
                 char=$LAB_WALL_CHAR
             elif [[ $x -eq $monsterX && $y -eq $monsterY ]]; then
                 char=$LAB_MONSTER_CHAR
+            elif $shotExist && [[ $x -eq $shotX && $y -eq $shotY ]]; then
+                char=$LAB_SHOT_CHAR
             else
                 char=$LAB_NOT_WALL_CHAR
             fi
@@ -252,6 +255,7 @@ DrawMinimap(){
         done
         echo
     done
+    echo "$shotExist $shotX $shotY $playerX $playerY"
 }
 
 PrintScreen() {
@@ -262,12 +266,14 @@ PrintScreen() {
     local rightY=${DIR_Y[$(( (playerDir + 1) % 4 ))]}
     local frontWall=$MAX_SCREEN_DEPTH
     local monsterPos=$MAX_SCREEN_DEPTH
+    local shotPos=$MAX_SCREEN_DEPTH
     echo -ne '\e[0;0f'
     for (( i=0; i < 8; ++i )); do
         x=$(( playerX + i * DIR_X[playerDir] ))
         y=$(( playerY + i * DIR_Y[playerDir] ))
         r=$(( x * LABIRINTH_WIDTH + y ))
         [[ $x -eq $monsterX && $y -eq $monsterY ]] && monsterPos=$i
+        $shotExist && [[ $x -eq $shotX && $y -eq $shotY ]] && shotPos=$i
         if [[ ${labirinth[r]} -eq 1 ]]; then
             frontWall=$i
             break 1
@@ -280,7 +286,10 @@ PrintScreen() {
     for (( x=0; x < $SCREEN_HEIGHT; ++x )); do
         for (( y=0; y < $SCREEN_WIDTH; ++y )); do
             r=$(( $x * $SCREEN_WIDTH + $y ))
-            if [[ $monsterPos -le MONSTER_FRONT[r] ]]; then
+            if [[ $shotPos -lt $MAX_SCREEN_DEPTH &&
+                        $(( (x - SHOT_CENTER_X[$shotPos]) ** 2 + (y - SHOT_CENTER_Y) ** 2 )) -le $(( SHOT_RADIUS[$shotPos] ** 2 )) ]]; then
+                echo -ne "${SHOT_CHAR}"
+            elif [[ $monsterPos -le MONSTER_FRONT[r] ]]; then
                 echo -ne "${MONSTER_CHAR}"
             elif [[ frontWall -le $(( FRONT_WALLS[r] - 1 )) ]]; then
                 echo -ne "${FRONT_WALL_CHAR}"
@@ -361,8 +370,33 @@ MonsterAppear(){
     monsterY=${availableY[r]}
 }
 
-MoveShot(){
+KillMonster(){
     return
+}
+
+MoveShot(){
+    if $shotExist; then
+        local firstStepX=$(( $shotX + ${DIR_X[shotDir]} ))
+        local firstStepY=$(( $shotY + ${DIR_Y[shotDir]} ))
+        if canGo $firstStepX $firstStepY; then
+            if [[ $monsterX -eq $firstStepX && $monsterY -eq $firstStepY ]]; then
+                KillMonster
+                shotExist=false
+            fi
+            shotX=firstStepX
+            shotY=firstStepY
+        else
+            shotExist=false
+        fi
+    elif [[ $action == "fire" ]]; then
+        echo $action
+        shotX=$(( $playerX + ${DIR_X[playerDir]} ))
+        shotY=$(( $playerY + ${DIR_Y[playerDir]} ))
+        shotDir=$playerDir
+        if canGo $shotX $shotY; then
+            shotExist=true
+        fi
+    fi
 }
 
 MoveMonster(){
@@ -377,6 +411,7 @@ MovePlayer(){
             let "playerX -= DIR_X[playerDir]" && let "playerY -= DIR_Y[playerDir]" && needPrint=true;;
         "turnRight") playerDir=$(( (playerDir + 1 ) % 4 )) && needPrint=true;;
         "turnLeft")  playerDir=$(( (playerDir + 3 ) % 4 )) && needPrint=true;;
+        "fire") MoveShot;;
     esac
 }
 
@@ -466,12 +501,13 @@ runLevel() {
             $FIRE_KEY)  action='fire';;
             "")		;;
         esac
+        echo $action
         if [[ $((newTime - time)) -ge DELAY ]]; then
             needPrint=false
-            MoveShot
             MoveMonster
             MovePlayer
             if $needPrint; then
+                MoveShot
                 PrintScreen
             fi
             action=
