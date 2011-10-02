@@ -156,6 +156,7 @@ declare -ra MONSTER_FRONT=(0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 declare -ri SCREEN_WIDTH=128
 declare -ri SCREEN_HEIGHT=36
 declare -ri MAX_SCREEN_DEPTH=9
+declare -a prevScreen=()
 
 declare -ri INFO_HEIGHT=7
 declare -ri MINIMAP_SIZE=7
@@ -166,20 +167,20 @@ declare -r INFO_BACKGROUND_CHAR='\e[37;44m \e[0m'
 declare -ri LABIRINTH_WIDTH=20
 declare -ri LABIRINTH_HEIGHT=20
 
-declare -r LAB_NOT_WALL_CHAR='\e[37;42m  \e[0m'
-declare -r LAB_WALL_CHAR='\e[37;40m  \e[0m'
-declare -r LAB_PLAYER_LEFT_CHAR='\e[31;42m< \e[0m'
-declare -r LAB_PLAYER_RIGHT_CHAR='\e[31;42m >\e[0m'
-declare -r LAB_PLAYER_UP_CHAR='\e[31;42m/\\\e[0m'
-declare -r LAB_PLAYER_DOWN_CHAR='\e[31;42m\\/\e[0m'
-declare -r LAB_MONSTER_CHAR='\e[31;42m@@\e[0m'
-declare -r LAB_SHOT_CHAR='\e[34;42mo0\e[0m'
+declare -r LAB_NOT_WALL_CHAR='\e[37;42m  '
+declare -r LAB_WALL_CHAR='\e[37;40m  '
+declare -r LAB_PLAYER_LEFT_CHAR='\e[31;42m< '
+declare -r LAB_PLAYER_RIGHT_CHAR='\e[31;42m >'
+declare -r LAB_PLAYER_UP_CHAR='\e[31;42m/\\'
+declare -r LAB_PLAYER_DOWN_CHAR='\e[31;42m\\/'
+declare -r LAB_MONSTER_CHAR='\e[31;42m@@'
+declare -r LAB_SHOT_CHAR='\e[34;42mo0'
 
-declare -r MONSTER_CHAR='\e[37;41m \e[0m'
-declare -r FRONT_WALL_CHAR='\e[37;43m \e[0m'
-declare -r CEIL_CHAR='\e[37;40m \e[0m'
-declare -r FLOOR_CHAR='\e[37;40m \e[0m'
-declare -r SHOT_CHAR='\e[37;46m \e[0m'
+declare -r MONSTER_CHAR='\e[37;41m '
+declare -r FRONT_WALL_CHAR='\e[37;43m '
+declare -r CEIL_CHAR='\e[37;40m '
+declare -r FLOOR_CHAR='\e[37;40m '
+declare -r SHOT_CHAR='\e[37;46m '
 
 declare -i playerX=5
 declare -i playerY=5
@@ -283,50 +284,62 @@ PrintScreen() {
         #echo "${rightWalls[i]} ${leftWalls[i]}"
     done
 
+    local curScreen=()
     for (( x=0; x < $SCREEN_HEIGHT; ++x )); do
         for (( y=0; y < $SCREEN_WIDTH; ++y )); do
             r=$(( $x * $SCREEN_WIDTH + $y ))
             if [[ $shotPos -lt $MAX_SCREEN_DEPTH &&
                         $(( (x - SHOT_CENTER_X[$shotPos]) ** 2 + (y - SHOT_CENTER_Y) ** 2 )) -le $(( SHOT_RADIUS[$shotPos] ** 2 )) ]]; then
-                echo -ne "${SHOT_CHAR}"
+                curScreen[$r]=$SHOT_CHAR
             elif [[ $monsterPos -le MONSTER_FRONT[r] ]]; then
-                echo -ne "${MONSTER_CHAR}"
+                curScreen[$r]=$MONSTER_CHAR
             elif [[ frontWall -le $(( FRONT_WALLS[r] - 1 )) ]]; then
-                echo -ne "${FRONT_WALL_CHAR}"
+                curScreen[$r]=$FRONT_WALL_CHAR
             elif [[ ${WALLS[r]} -le 0 ]]; then
                 if [[ $x -gt $ceil_bottom ]]; then
-                    echo -ne "${FLOOR_CHAR}"
+                    curScreen[$r]=$FLOOR_CHAR
                 else
-                    echo -ne "${CEIL_CHAR}"
+                    curScreen[$r]=$CEIL_CHAR
                 fi
             elif [[ ${EMPTY_WALLS[r]} -eq 0 ]]; then
                 if [[ y -gt $(( SCREEN_WIDTH / 2 )) ]]; then #right
                     if [[ ${rightWalls[$(( WALLS[r] - 1 ))]} -eq 0 ]]; then
                         if [[ $x -gt $CEIL_BOTTOM ]]; then
-                            echo -ne "${FLOOR_CHAR}"
+                            curScreen[$r]=$FLOOR_CHAR
                         else
-                            echo -ne "${CEIL_CHAR}"
+                            curScreen[$r]=$CEIL_CHAR
                         fi
                     else
-                        echo -n "${WALLS[r]}"
+                        curScreen[$r]=${WALLS[r]}
                     fi
                 else                                          #left
                     if [[ ${leftWalls[$(( WALLS[r] - 1 ))]} -eq 0 ]]; then
                         if [[ $x -gt $CEIL_BOTTOM ]]; then
-                            echo -ne "${FLOOR_CHAR}"
+                            curScreen[$r]=$FLOOR_CHAR
                         else
-                            echo -ne "${CEIL_CHAR}"
+                            curScreen[$r]=$CEIL_CHAR
                         fi
                     else
-                        echo -n "${WALLS[r]}"
+                        curScreen[$r]=${WALLS[$r]}
                     fi
                 fi
             else
-                echo -n "${WALLS[r]}"
+                curScreen[$r]=${WALLS[$r]}
             fi
+        done
+    done
+
+    for (( x=0; x < $SCREEN_HEIGHT; ++x )); do
+        for (( y=0; y < $SCREEN_WIDTH; ++y )); do
+            r=$(( $x * $SCREEN_WIDTH + $y ))
+            # if [[ "${curScreen[$r]}" != "${prevScreen[$r]}" ]]; then
+                echo -ne "\e[${x};${y}f${curScreen[$r]}\e[0m"
+                # prevScreen[$r]=${curScreen[$r]}
+            # fi
         done
         echo
     done
+
     for (( x=0; x < $INFO_HEIGHT; ++x )); do
         for (( y=0; y < $SCREEN_WIDTH; ++y)); do
             echo -ne "${INFO_BACKGROUND_CHAR}"
@@ -368,10 +381,38 @@ MonsterAppear(){
     local r=$(( RANDOM % availableSize ))
     monsterX=${availableX[r]}
     monsterY=${availableY[r]}
+    monsterPrevX=$monsterX
+    monsterPrevY=$monsterY
 }
 
 KillMonster(){
-    return
+    MonsterAppear
+}
+
+MoveMonster(){
+    local availableX=()
+    local availableY=()
+    local availableSize=0
+    for (( dir=0; dir < 4; ++dir )); do
+        local x=$(( monsterX + DIR_X[$dir] ))
+        local y=$(( monsterY + DIR_Y[$dir] ))
+        if canGo $x $y && [[ $x -ne $monsterPrevX || $y -ne $monsterPrevY ]]; then
+            echo olollolo
+            availableX[$availableSize]=$x
+            availableY[$availableSize]=$y
+            let "++availableSize"
+        fi
+    done
+    if [[ $availableSize -eq 0 ]]; then
+        availableSize=1
+        availableX[0]=$monsterPrevX
+        availableY[0]=$monsterPrevY
+    fi
+    local r=$(( RANDOM % availableSize ))
+    echo "----------------------------------${availableX[*]}"
+    echo "----------------------------------${availableY[*]}"
+    monsterX=${availableX[$r]}
+    monsterY=${availableY[$r]}
 }
 
 MoveShot(){
@@ -389,7 +430,6 @@ MoveShot(){
             shotExist=false
         fi
     elif [[ $action == "fire" ]]; then
-        echo $action
         shotX=$(( $playerX + ${DIR_X[playerDir]} ))
         shotY=$(( $playerY + ${DIR_Y[playerDir]} ))
         shotDir=$playerDir
@@ -399,9 +439,6 @@ MoveShot(){
     fi
 }
 
-MoveMonster(){
-    return
-}
 
 MovePlayer(){
     case "$action" in
@@ -501,7 +538,6 @@ runLevel() {
             $FIRE_KEY)  action='fire';;
             "")		;;
         esac
-        echo $action
         if [[ $((newTime - time)) -ge DELAY ]]; then
             needPrint=false
             MoveMonster
@@ -509,6 +545,7 @@ runLevel() {
             if $needPrint; then
                 MoveShot
                 PrintScreen
+                echo "$monsterX $monsterY"
             fi
             action=
             time=newTime
