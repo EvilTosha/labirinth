@@ -265,7 +265,7 @@ GameOver(){
     clear
     tput sgr0
     stty echo
-    echo -e "\e[15;15fGame over!"
+    echo -e "\e[?25h\e[15;15fGame over!"
     break 2
 }
 
@@ -273,7 +273,7 @@ QuitGame(){
     tput sgr0
     stty echo
     clear
-    echo "Thanks for playing!"
+    echo -e "\e[?25hThanks for playing!"
     break 2
 }
 
