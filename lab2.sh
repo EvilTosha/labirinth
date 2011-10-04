@@ -218,6 +218,8 @@ declare -r TIMEOUT="0.05"
 
 declare TIMER
 
+IFS="${NIFS}"
+
 TimerStart() {
     TIMER=$((`date +%s` * 100 + (10#`date +%N` / 10000000)))
 }
@@ -303,64 +305,75 @@ PrintScreen() {
     done
 
     local curScreen=()
+    local r
     for (( x=0; x < $SCREEN_HEIGHT; ++x )); do
-        for (( y=0; y < $SCREEN_WIDTH; ++y )); do
-            r=$(( $x * $SCREEN_WIDTH + $y ))
-            if [[ $shotPos -lt $MAX_SCREEN_DEPTH && $shotPos -lt $monsterPos &&
+        for (( y=0; y < $SCREEN_WIDTH + 1; ++y )); do
+            r=$(( $x * $SCREEN_WIDTH + $y))
+            l=$(( $r + $x ))
+            if [[ $y -eq $SCREEN_WIDTH ]]; then
+                curScreen[$l]='\n'
+            elif [[ $shotPos -lt $MAX_SCREEN_DEPTH && $shotPos -lt $monsterPos &&
                         $(( (x - SHOT_CENTER_X[$shotPos]) ** 2 + (y - SHOT_CENTER_Y) ** 2 )) -le $(( SHOT_RADIUS[$shotPos] ** 2 )) ]]; then
-                curScreen[$r]=$SHOT_CHAR
+                curScreen[$l]=$SHOT_CHAR
             elif [[ $monsterPos -le MONSTER_FRONT[r] ]]; then
-                curScreen[$r]=$MONSTER_CHAR
+                curScreen[$l]=$MONSTER_CHAR
             elif [[ $frontWall -le $(( FRONT_WALLS[r] - 1 )) ]]; then
-                curScreen[$r]=$FRONT_WALL_CHAR
+                curScreen[$l]=$FRONT_WALL_CHAR
             elif [[ ${WALLS[r]} -le 0 ]]; then
                 if [[ $x -gt $CEIL_BOTTOM ]]; then
-                    curScreen[$r]=$FLOOR_CHAR
+                    curScreen[$l]=$FLOOR_CHAR
                 else
-                    curScreen[$r]=$CEIL_CHAR
+                    curScreen[$l]=$CEIL_CHAR
                 fi
             elif [[ y -gt $(( SCREEN_WIDTH / 2 )) ]]; then #right
                 if [[ ${rightWalls[$(( WALLS[r] - 1 ))]} -eq 0 ]]; then
                     if [[ ${EMPTY_WALLS[r]} -eq 0 ]]; then
                         if [[ $x -gt $CEIL_BOTTOM ]]; then
-                            curScreen[$r]=$FLOOR_CHAR
+                            curScreen[$l]=$FLOOR_CHAR
                         else
-                            curScreen[$r]=$CEIL_CHAR
+                            curScreen[$l]=$CEIL_CHAR
                         fi
                     else
-                        curScreen[$r]=$FRONT_WALL_CHAR
+                        curScreen[$l]=$FRONT_WALL_CHAR
                     fi
                 else
-                    curScreen[$r]=$SIDE_WALL_CHAR     #${WALLS[r]}
+                    curScreen[$l]=$SIDE_WALL_CHAR     #${WALLS[r]}
                 fi
             else                                          #left
                 if [[ ${leftWalls[$(( WALLS[r] - 1 ))]} -eq 0 ]]; then
                     if [[ ${EMPTY_WALLS[r]} -eq 0 ]]; then
                         if [[ $x -gt $CEIL_BOTTOM ]]; then
-                            curScreen[$r]=$FLOOR_CHAR
+                            curScreen[$l]=$FLOOR_CHAR
                         else
-                            curScreen[$r]=$CEIL_CHAR
+                            curScreen[$l]=$CEIL_CHAR
                         fi
                     else
-                        curScreen[$r]=$FRONT_WALL_CHAR     #${WALLS[$r]}
+                        curScreen[$l]=$FRONT_WALL_CHAR     #${WALLS[$r]}
                     fi
                 else
-                    curScreen[$r]=$SIDE_WALL_CHAR         #${WALLS[$r]}
+                    curScreen[$l]=$SIDE_WALL_CHAR         #${WALLS[$r]}
                 fi
             fi
         done
     done
 
-    for (( x=0; x < $SCREEN_HEIGHT; ++x )); do
-        for (( y=0; y < $SCREEN_WIDTH; ++y )); do
-            r=$(( $x * $SCREEN_WIDTH + $y ))
-            # if [[ "${curScreen[$r]}" != "${prevScreen[$r]}" ]]; then
-                echo -ne "\e[${x};${y}f${curScreen[$r]}\e[0m"
-                # prevScreen[$r]=${curScreen[$r]}
-            # fi
-        done
-        echo
-    done
+    echo -e "${curScreen[*]}"
+    # for (( x=0; x < ($SCREEN_WIDTH + 1) * $SCREEN_HEIGHT; ++x )); do
+    #     if [[ ${curScreen[$x]} == '\n' ]]; then
+    #         echo olololololo
+    #         sleep 10000
+    #     fi
+    #     echo -ne "${curScreen[$x]}"
+    # done
+    # for (( x=0; x < $SCREEN_HEIGHT; ++x )); do
+    #     for (( y=0; y < $SCREEN_WIDTH + 1; ++y )); do
+    #         r=$(( $x * $SCREEN_WIDTH + $y))
+    #         # if [[ "${curScreen[$r]}" != "${prevScreen[$r]}" ]]; then
+    #             echo -ne "\e[${x};${y}f${curScreen[$r]}\e[0m"
+    #             # prevScreen[$r]=${curScreen[$r]}
+    #         # fi
+    #     done
+    # done
 
     for (( x=0; x < $INFO_HEIGHT; ++x )); do
         for (( y=0; y < $SCREEN_WIDTH; ++y)); do
@@ -541,6 +554,7 @@ GenerateLabirinth() {
     done
 }
 
+
 runLevel() {
     local -l key
     local -i time=0
@@ -548,8 +562,8 @@ runLevel() {
     action=
     while true; do
         key=""
-        read -t $TIMEOUT -n 1 key
-        newTime=$((`date +%s` * 100 + (10#`date +%N` / 10000000)))
+        read -n 1 key
+        echo "ololololololololololololololololo   $action"
         case "$key" in
             $UP_KEY)	   action='moveForward';;
             $DOWN_KEY)	   action='moveBack';;
@@ -560,6 +574,7 @@ runLevel() {
             $QUIT_KEY)     action='quit';;
             "")		;;
         esac
+        newTime=$((`date +%s` * 100 + (10#`date +%N` / 10000000)))
         if [[ $((newTime - time)) -ge DELAY ]]; then
             MoveShot
             MoveMonster
@@ -582,9 +597,9 @@ for (( x=0; x < $LABIRINTH_HEIGHT; ++x )); do
     done
 done
 
-stty -echo
-# Убирам курсор
-echo -e "\033[?25l"
+# stty -echo
+# # Убирам курсор
+# echo -e "\033[?25l"
 
 clear
 
