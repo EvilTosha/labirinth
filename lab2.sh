@@ -155,7 +155,7 @@ declare -ra MONSTER_FRONT=(0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 
 declare -ri SCREEN_WIDTH=107
 declare -ri SCREEN_HEIGHT=36
-declare -ri MAX_SCREEN_DEPTH=9
+declare -ri MAX_SCREEN_DEPTH=8
 declare -a prevScreen=()
 
 declare -ri INFO_HEIGHT=7
@@ -192,14 +192,18 @@ declare -i monsterX=
 declare -i monsterY=
 declare -i monsterPrevX=
 declare -i monsterPrevY=
+declare -i monsterSpeed=10
+declare -i monsterSpeedCnt=0
 declare -i shotX=
 declare -i shotY=
 declare -i shotDir=
 declare shotExist=false
+declare -i shotSpeed=1
+declare -i shotSpeedCnt=0
 declare -ra DIR_X=(-1 0 1 0)
 declare -ra DIR_Y=(0 1 0 -1)
 
-declare -ra SHOT_CENTER_X=(18 17 16 14 13 12 12)
+declare -ra SHOT_CENTER_X=(30 25 22 19 16 14 12)                                      #(18 17 16 14 13 12 12)
 declare -ri SHOT_CENTER_Y=$(( SCREEN_WIDTH / 2 ))
 declare -ra SHOT_RADIUS=(3 2 2 2 1 1 1)
 
@@ -216,50 +220,61 @@ declare -ri CEIL_BOTTOM=12
 
 declare -r TIMEOUT="0.05"
 
-declare TIMER
-
-IFS="${NIFS}"
-
-TimerStart() {
-    TIMER=$((`date +%s` * 100 + (10#`date +%N` / 10000000)))
+OutOfRange(){
+    #$1 = x, $2 = y
+    if [[ $1 -lt 1 || $2 -lt 1 || $1 -gt $(( $LABIRINTH_HEIGHT - 2 )) || $2 -gt $(( $LABIRINTH_WIDTH - 2 )) ]]; then
+        return 0
+    fi
+    return 1
 }
 
-TimerDiff(){
-    local time=$((`date +%s` * 100 + (10#`date +%N` / 10000000)))
-    echo $(( time - TIMER ))
+CanGo(){
+    #$1 = x, $2 = y
+    if OutOfRange $1 $2; then
+        return 1
+    fi
+    local -i r=$(( $1 * $LABIRINTH_WIDTH + $2 ))
+    if [[ ${labirinth[r]} -eq 1 ]]; then
+        return 1
+    fi
+    return 0
+}
+
+DrawPieceOfMap(){
+    local -i cornerX=$1
+    local -i cornerY=$2
+    local -i h=$3
+    local -i w=$4
+    local -a screen=()
+    for (( x=cornerX; x < cornerX + h; ++x )); do
+        for (( y=cornerY; y < cornerY + w; ++y )); do
+            local -i r=$(( (x - cornerX) * (w + 1) + (y - cornerY) ))
+            if ! `CanGo $x $y`; then
+                screen[$r]=$LAB_WALL_CHAR
+            elif [[ $x -eq $playerX && $y -eq $playerY ]]; then
+                case "$playerDir" in
+                    0) screen[$r]=$LAB_PLAYER_UP_CHAR;;
+                    1) screen[$r]=$LAB_PLAYER_RIGHT_CHAR;;
+                    2) screen[$r]=$LAB_PLAYER_DOWN_CHAR;;
+                    3) screen[$r]=$LAB_PLAYER_LEFT_CHAR;;
+                esac
+            elif [[ $x -eq $monsterX && $y -eq $monsterY ]]; then
+                screen[$r]=$LAB_MONSTER_CHAR
+            elif $shotExist && [[ $x -eq $shotX && $y -eq $shotY ]]; then
+                screen[$r]=$LAB_SHOT_CHAR
+            else
+                screen[$r]=$LAB_NOT_WALL_CHAR
+            fi
+        done
+        screen[$(( r + 1 ))]='\n'
+    done
+    echo -e "${screen[*]}"
 }
 
 
 DrawMinimap(){
     echo -e $MINIMAP_INIT_POS
-    for (( dx=-$MINIMAP_HALF_SIZE; dx <= $MINIMAP_HALF_SIZE; ++dx )); do
-        for (( dy=-$MINIMAP_HALF_SIZE; dy <= $MINIMAP_HALF_SIZE; ++dy )); do
-            local x=`expr $playerX + $dx`
-            local y=`expr $playerY + $dy`
-            local char=
-            if [[ $dx -eq 0 && $dy -eq 0 ]]; then
-                case "$playerDir" in
-                    0) char=$LAB_PLAYER_UP_CHAR;;
-                    1) char=$LAB_PLAYER_RIGHT_CHAR;;
-                    2) char=$LAB_PLAYER_DOWN_CHAR;;
-                    3) char=$LAB_PLAYER_LEFT_CHAR;;
-                esac
-            elif [[ $x -lt 1 || $y -lt 1 || $x -gt $(( $LABIRINTH_HEIGHT - 2 )) || $y -gt $(( $LABIRINTH_WIDTH - 2 )) ]]; then
-                char=$LAB_WALL_CHAR
-            elif [[ ${labirinth[$(( $x * $LABIRINTH_WIDTH + $y ))]} -eq 1 ]]; then
-                char=$LAB_WALL_CHAR
-            elif [[ $x -eq $monsterX && $y -eq $monsterY ]]; then
-                char=$LAB_MONSTER_CHAR
-            elif $shotExist && [[ $x -eq $shotX && $y -eq $shotY ]]; then
-                char=$LAB_SHOT_CHAR
-            else
-                char=$LAB_NOT_WALL_CHAR
-            fi
-            echo -ne "${char}"
-        done
-        echo
-    done
-    echo "$shotExist $shotX $shotY $playerX $playerY"
+    DrawPieceOfMap $(( playerX - MINIMAP_HALF_SIZE)) $(( playerY - MINIMAP_HALF_SIZE )) $MINIMAP_SIZE $MINIMAP_SIZE
 }
 
 GameOver(){
@@ -281,13 +296,13 @@ QuitGame(){
 
 PrintScreen() {
   #составление экрана для вывода
-    local rightWalls=()
-    local leftWalls=()
-    local rightX=${DIR_X[$(( (playerDir + 1) % 4 ))]}
-    local rightY=${DIR_Y[$(( (playerDir + 1) % 4 ))]}
-    local frontWall=$MAX_SCREEN_DEPTH
-    local monsterPos=$MAX_SCREEN_DEPTH
-    local shotPos=$MAX_SCREEN_DEPTH
+    local -ai rightWalls=()
+    local -ai leftWalls=()
+    local -i rightX=${DIR_X[$(( (playerDir + 1) % 4 ))]}
+    local -i rightY=${DIR_Y[$(( (playerDir + 1) % 4 ))]}
+    local -i frontWall=$MAX_SCREEN_DEPTH
+    local -i monsterPos=$MAX_SCREEN_DEPTH
+    local -i shotPos=$MAX_SCREEN_DEPTH
     echo -ne '\e[0;0f'
     for (( i=0; i < 8; ++i )); do
         x=$(( playerX + i * DIR_X[playerDir] ))
@@ -301,11 +316,10 @@ PrintScreen() {
         fi
         rightWalls[i]=${labirinth[$(( (x + rightX) * LABIRINTH_WIDTH + (y + rightY) ))]}
         leftWalls[i]=${labirinth[$(( (x - rightX) * LABIRINTH_WIDTH + (y - rightY) ))]}
-        #echo "${rightWalls[i]} ${leftWalls[i]}"
     done
 
-    local curScreen=()
-    local r
+    local -a curScreen=()
+    local -i r
     for (( x=0; x < $SCREEN_HEIGHT; ++x )); do
         for (( y=0; y < $SCREEN_WIDTH + 1; ++y )); do
             r=$(( $x * $SCREEN_WIDTH + $y))
@@ -358,22 +372,6 @@ PrintScreen() {
     done
 
     echo -e "${curScreen[*]}"
-    # for (( x=0; x < ($SCREEN_WIDTH + 1) * $SCREEN_HEIGHT; ++x )); do
-    #     if [[ ${curScreen[$x]} == '\n' ]]; then
-    #         echo olololololo
-    #         sleep 10000
-    #     fi
-    #     echo -ne "${curScreen[$x]}"
-    # done
-    # for (( x=0; x < $SCREEN_HEIGHT; ++x )); do
-    #     for (( y=0; y < $SCREEN_WIDTH + 1; ++y )); do
-    #         r=$(( $x * $SCREEN_WIDTH + $y))
-    #         # if [[ "${curScreen[$r]}" != "${prevScreen[$r]}" ]]; then
-    #             echo -ne "\e[${x};${y}f${curScreen[$r]}\e[0m"
-    #             # prevScreen[$r]=${curScreen[$r]}
-    #         # fi
-    #     done
-    # done
 
     for (( x=0; x < $INFO_HEIGHT; ++x )); do
         for (( y=0; y < $SCREEN_WIDTH; ++y)); do
@@ -385,35 +383,20 @@ PrintScreen() {
     echo $monsterPos
 }
 
-canGo(){
-    local x=$1
-    local y=$2
-    # echo "$x $y ${labirinth[$(( x * LABIRINTH_WIDTH + y ))]}"
-    if [[ $x -lt 1 || $y -lt 1 || $x -gt $(( $LABIRINTH_HEIGHT - 2 )) || $y -gt $(( $LABIRINTH_WIDTH - 2 )) ]]; then
-        return 1
-    fi
-    local r=$(( $x * $LABIRINTH_WIDTH + $y ))
-    if [[ ${labirinth[r]} -eq 1 ]]; then
-        return 1
-    fi
-    # read
-    return 0
-}
-
 MonsterAppear(){
-    local dx=0
-    local dy=0
+    local -i dx=0
+    local -i dy=0
     [[ playerX -le $(( LABIRINTH_HEIGHT / 2 )) ]] && let "dx += LABIRINTH_HEIGHT / 2"
     [[ playerY -le $(( LABIRINTH_WIDTH / 2 )) ]] && let "dy += LABIRINTH_WIDTH / 2"
-    local availableX=()
-    local availableY=()
-    local availableSize=0
+    local -ai availableX=()
+    local -ai availableY=()
+    local -i availableSize=0
     for (( x=dx; x < $(( LABIRINTH_HEIGHT / 2  + dx )); ++x )); do
         for (( y=dy; y < $(( LABIRINTH_WIDTH / 2 + dy )); ++y )); do
-            canGo $x $y && availableX[$availableSize]=$x && availableY[$availableSize]=$y && let "++availableSize"
+            CanGo $x $y && availableX[$availableSize]=$x && availableY[$availableSize]=$y && let "++availableSize"
         done
     done
-    local r=$(( RANDOM % availableSize ))
+    local -i r=$(( RANDOM % availableSize ))
     monsterX=${availableX[r]}
     monsterY=${availableY[r]}
     monsterPrevX=$monsterX
@@ -425,13 +408,17 @@ KillMonster(){
 }
 
 MoveMonster(){
-    local availableX=()
-    local availableY=()
-    local availableSize=0
+    monsterSpeedCnt=$(( monsterSpeedCnt % monsterSpeed ))
+    if [[ monsterSpeedCnt -ne 0 ]]; then
+        return;
+    fi
+    local -ai availableX=()
+    local -ai availableY=()
+    local -i availableSize=0
     for (( dir=0; dir < 4; ++dir )); do
-        local x=$(( monsterX + DIR_X[$dir] ))
-        local y=$(( monsterY + DIR_Y[$dir] ))
-        if canGo $x $y && [[ $x -ne $monsterPrevX || $y -ne $monsterPrevY ]]; then
+        local -i x=$(( monsterX + DIR_X[$dir] ))
+        local -i y=$(( monsterY + DIR_Y[$dir] ))
+        if CanGo $x $y && [[ $x -ne $monsterPrevX || $y -ne $monsterPrevY ]]; then
             availableX[$availableSize]=$x
             availableY[$availableSize]=$y
             let "++availableSize"
@@ -442,7 +429,7 @@ MoveMonster(){
         availableX[0]=$monsterPrevX
         availableY[0]=$monsterPrevY
     fi
-    local r=$(( RANDOM % availableSize ))
+    local -i r=$(( RANDOM % availableSize ))
     monsterPrevX=$monsterX
     monsterPrevY=$monsterY
     monsterX=${availableX[$r]}
@@ -451,9 +438,13 @@ MoveMonster(){
 
 MoveShot(){
     if $shotExist; then
-        local firstStepX=$(( $shotX + ${DIR_X[shotDir]} ))
-        local firstStepY=$(( $shotY + ${DIR_Y[shotDir]} ))
-        if canGo $firstStepX $firstStepY; then
+        shotSpeedCnt=$(( shotSpeedCnt % shotSpeed ))
+        if [[ shotSpeedCnt -ne 0 ]]; then
+            return;
+        fi
+        local -i firstStepX=$(( $shotX + ${DIR_X[shotDir]} ))
+        local -i firstStepY=$(( $shotY + ${DIR_Y[shotDir]} ))
+        if CanGo $firstStepX $firstStepY; then
             if [[ $monsterX -eq $firstStepX && $monsterY -eq $firstStepY ]]; then
                 KillMonster
                 shotExist=false
@@ -467,7 +458,7 @@ MoveShot(){
         shotX=$(( $playerX + ${DIR_X[playerDir]} ))
         shotY=$(( $playerY + ${DIR_Y[playerDir]} ))
         shotDir=$playerDir
-        if canGo $shotX $shotY; then
+        if CanGo $shotX $shotY; then
             shotExist=true
         fi
     fi
@@ -476,9 +467,9 @@ MoveShot(){
 
 MovePlayer(){
     case "$action" in
-        "moveForward") canGo $(( $playerX + ${DIR_X[playerDir]} )) $(( $playerY + ${DIR_Y[playerDir]} )) &&
+        "moveForward") CanGo $(( $playerX + ${DIR_X[playerDir]} )) $(( $playerY + ${DIR_Y[playerDir]} )) &&
             let "playerX += DIR_X[playerDir]" && let "playerY += DIR_Y[playerDir]";;
-        "moveBack") canGo $(( playerX - DIR_X[playerDir] )) $(( playerY - DIR_Y[playerDir] )) &&
+        "moveBack") CanGo $(( playerX - DIR_X[playerDir] )) $(( playerY - DIR_Y[playerDir] )) &&
             let "playerX -= DIR_X[playerDir]" && let "playerY -= DIR_Y[playerDir]";;
         "turnRight") playerDir=$(( (playerDir + 1 ) % 4 ));;
         "turnLeft")  playerDir=$(( (playerDir + 3 ) % 4 ));;
@@ -486,29 +477,17 @@ MovePlayer(){
 }
 
 PrintLabirinth() {
-    for (( x=0; x < ${LABIRINTH_HEIGHT}; ++x )); do
-        for (( y = 0; y < ${LABIRINTH_WIDTH}; ++y )); do
-            r=$(( $x * $LABIRINTH_WIDTH + $y ))
-            if [[ ${labirinth[r]} == 1 ]]; then
-                echo -ne "${LAB_WALL_CHAR}"
-            elif [[ $x -eq $monsterX && $y -eq $monsterY ]]; then
-                echo -ne "${LAB_MONSTER_CHAR}"
-            else
-                echo -ne "${LAB_NOT_WALL_CHAR}"
-            fi
-        done
-        echo
-    done
+    DrawPieceOfMap 0 0 $LABIRINTH_HEIGHT $LABIRINTH_WIDTH
 }
 
 
-check(){
-    local x=$1
-    local y=$2
-    local dir=$3
+Check(){
+    local -i x=$1
+    local -i y=$2
+    local -i dir=$3
     let "x += ${DIR_X[${dir}]}"
     let "y += ${DIR_Y[${dir}]}"
-    if [[ $x -lt 1 || $y -lt 1 || $x -gt $(( $LABIRINTH_HEIGHT - 2 )) || $y -gt $(( $LABIRINTH_WIDTH - 2 )) ]]; then
+    if OutOfRange $x $y; then
         return 1
     fi
     if [[ ${labirinth[$(( $x * $LABIRINTH_WIDTH + $y ))]} -eq 0 ]]; then
@@ -517,8 +496,8 @@ check(){
     if [[ ${labirinth[$(( (x + DIR_X[$dir]) * LABIRINTH_WIDTH + y + DIR_Y[$dir] )) ]} -eq 0 ]]; then
         return 1
     fi
-    local dx=(-1 -1 0 0)
-    local dy=(-1 0 -1 0)
+    local -ai dx=(-1 -1 0 0)
+    local -ai dy=(-1 0 -1 0)
     for (( i=0; i < 4; ++i )); do
         cnt=0
         for (( j=0; j < 4; ++j )); do
@@ -531,9 +510,9 @@ check(){
     return 0
 }
 
-ended() {
+Ended() {
     for (( ei=0; ei < 4; ++ei )); do
-        if check $1 $2 $ei; then
+        if Check $1 $2 $ei; then
             return 1
         fi
     done
@@ -542,12 +521,12 @@ ended() {
 
 
 GenerateLabirinth() {
-    local x=$1
-    local y=$2
+    local -i x=$1
+    local -i y=$2
     labirinth[$(( x * LABIRINTH_WIDTH + y ))]=0
-    while ! `ended $x $y`; do
-        local dir=$(( $RANDOM % 4 ))
-        while ! `check $x $y $dir`; do
+    while ! `Ended $x $y`; do
+        local -i dir=$(( $RANDOM % 4 ))
+        while ! `Check $x $y $dir`; do
             dir=$(( $RANDOM % 4 ))
         done
         GenerateLabirinth $(( x + DIR_X[dir] )) $(( y + DIR_Y[dir] ))
@@ -555,15 +534,14 @@ GenerateLabirinth() {
 }
 
 
-runLevel() {
+RunLevel() {
     local -l key
     local -i time=0
     local -i newTime
     action=
     while true; do
         key=""
-        read -n 1 key
-        echo "ololololololololololololololololo   $action"
+        read -t $TIMEOUT -n 1 key
         case "$key" in
             $UP_KEY)	   action='moveForward';;
             $DOWN_KEY)	   action='moveBack';;
@@ -597,6 +575,8 @@ for (( x=0; x < $LABIRINTH_HEIGHT; ++x )); do
     done
 done
 
+IFS=""
+
 # stty -echo
 # # Убирам курсор
 # echo -e "\033[?25l"
@@ -611,7 +591,7 @@ PrintLabirinth
 
 PrintScreen
 
-runLevel
+RunLevel
 
 stty echo
 
