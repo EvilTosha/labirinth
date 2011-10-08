@@ -1,5 +1,7 @@
 #!/bin/bash -i
 
+##============================================================================ Initialization Section =============================================
+
 declare -ra WALLS=(2 2 2 2 2 2 2 2 2 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 2 2 2 2 2 2 2 2 2
 2 2 2 2 2 2 2 2 2 2 2 2 2 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 2 2 2 2 2 2 2 2 2 2 2 2 2
 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
@@ -158,11 +160,14 @@ declare -ri SCREEN_HEIGHT=36
 declare -ri MAX_SCREEN_DEPTH=8
 declare -a prevScreen=()
 
-declare -ri INFO_HEIGHT=7
+declare -ri INTERFACE_HEIGHT=7
 declare -ri MINIMAP_SIZE=7
 declare -ri MINIMAP_HALF_SIZE=3
-declare -r MINIMAP_INIT_POS="\e[$(( SCREEN_HEIGHT - 1 ));0f"
-declare -r INFO_BACKGROUND_CHAR='\e[37;44m \e[0m'
+declare -r MINIMAP_INIT_POS="\e[$(( SCREEN_HEIGHT ));0f"
+declare -r INTERFACE_COLOR='\e[37;44m'
+declare -ri KEYS_MSG_Y=80
+declare -r KEYS_MSG="\e[$(( SCREEN_HEIGHT + 1));${KEYS_MSG_Y}f\e[37;44m   Keys:\e[$(( SCREEN_HEIGHT + 2 ));${KEYS_MSG_Y}f\e[33;44mq\e[37;44m - quit\e[$(( SCREEN_HEIGHT + 3 ));${KEYS_MSG_Y}f\e[33;44mWASD\e[37;44m - move & turn\e[$(( SCREEN_HEIGHT + 4 ));${KEYS_MSG_Y}f\e[33;44mf\e[37;44m - fire"
+declare -ri LIFE_BAR_INIT_POS="\e$(( SCREEN_HEIGHT + 3));40f"
 
 declare -ri LABIRINTH_WIDTH=20
 declare -ri LABIRINTH_HEIGHT=20
@@ -186,6 +191,7 @@ declare -r SHOT_CHAR='\e[37;46m '
 declare -i playerX=5
 declare -i playerY=5
 declare -i playerDir=0
+declare -i playerLifes=5
 declare action=
 
 declare -i monsterX=
@@ -214,11 +220,13 @@ declare -r DOWN_KEY='s'
 declare -r FIRE_KEY='f'
 declare -r QUIT_KEY='q'
 
-declare -i -r DELAY=20
+declare -i -r DELAY=10
 
 declare -ri CEIL_BOTTOM=12
 
 declare -r TIMEOUT="0.05"
+
+
 
 OutOfRange(){
     #$1 = x, $2 = y
@@ -239,6 +247,8 @@ CanGo(){
     fi
     return 0
 }
+
+##============================================================ Screen Output Section ================================================
 
 DrawPieceOfMap(){
     local -i cornerX=$1
@@ -277,21 +287,18 @@ DrawMinimap(){
     DrawPieceOfMap $(( playerX - MINIMAP_HALF_SIZE)) $(( playerY - MINIMAP_HALF_SIZE )) $MINIMAP_SIZE $MINIMAP_SIZE
 }
 
-GameOver(){
-    echo -e "\e[37;41m"
-    clear
-    tput sgr0
-    stty echo
-    echo -e "\e[?25h\e[15;15fGame over!"
-    break 2
-}
-
-QuitGame(){
-    tput sgr0
-    stty echo
-    clear
-    echo -e "\e[?25hThanks for playing!"
-    break 2
+DrawInterface(){
+    local -a interface=()
+    for (( x=0; x < $INTERFACE_HEIGHT; ++x )); do
+        for (( y=0; y < $SCREEN_WIDTH; ++y)); do
+            local -i r=$(( x * (SCREEN_WIDTH + 1) + y ))
+            interface[$r]=" "
+        done
+        interface[$(( r + 1 ))]='\n'
+    done
+    echo -ne "${INTERFACE_COLOR}${interface[*]}"
+    DrawMinimap
+    echo -ne "$KEYS_MSG"
 }
 
 PrintScreen() {
@@ -370,17 +377,28 @@ PrintScreen() {
             fi
         done
     done
+    echo -en "${curScreen[*]}"
+    DrawInterface
+}
 
-    echo -e "${curScreen[*]}"
 
-    for (( x=0; x < $INFO_HEIGHT; ++x )); do
-        for (( y=0; y < $SCREEN_WIDTH; ++y)); do
-            echo -ne "${INFO_BACKGROUND_CHAR}"
-        done
-        echo
-    done
-    DrawMinimap
-    echo $monsterPos
+##================================================================Game Logic Section=========================================================================
+
+GameOver(){
+    echo -e "\e[37;41m"
+    clear
+    tput sgr0
+    stty echo
+    echo -e "\e[?25h\e[15;15fGame over!"
+    break 2
+}
+
+QuitGame(){
+    tput sgr0
+    stty echo
+    clear
+    echo -e "\e[?25hThanks for playing!"
+    break 2
 }
 
 MonsterAppear(){
@@ -481,6 +499,9 @@ PrintLabirinth() {
 }
 
 
+
+##================================================================Generate Lab Section=========================================================================
+
 Check(){
     local -i x=$1
     local -i y=$2
@@ -532,6 +553,8 @@ GenerateLabirinth() {
         GenerateLabirinth $(( x + DIR_X[dir] )) $(( y + DIR_Y[dir] ))
     done
 }
+
+##================================================================Main Section=========================================================================
 
 
 RunLevel() {

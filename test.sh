@@ -14,9 +14,25 @@ TimerDiff(){
 a=true
 b=5
 
-if $a && [[ $b -eq 5 ]]; then
-    echo trololo
-fi
+foo(){
+    {
+        for (( x=0; x < 100; ++x )); do
+            echo -n $b
+            sleep 1
+        done
+        exit
+    }&
+}
+
+
+foo
+# read -u "${COPROC[0]}" key
+# echo $key
+sleep 2
+b=200
+sleep 3
+b="ololo"
+
 
 exit 0;
 
