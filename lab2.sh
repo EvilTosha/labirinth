@@ -158,19 +158,23 @@ declare -ra MONSTER_FRONT=(0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 declare -ri SCREEN_WIDTH=107
 declare -ri SCREEN_HEIGHT=36
 declare -ri MAX_SCREEN_DEPTH=8
-declare -a prevScreen=()
 
 declare -ri INTERFACE_HEIGHT=7
-declare -ri MINIMAP_SIZE=7
-declare -ri MINIMAP_HALF_SIZE=3
-declare -r MINIMAP_INIT_POS="\e[$(( SCREEN_HEIGHT ));0f"
+declare -ri MINIMAP_SIZE=11
+declare -ri MINIMAP_HALF_SIZE=5
+declare -r MINIMAP_INIT_POS="\e[$(( SCREEN_HEIGHT - 4 ));0f"
 declare -r INTERFACE_COLOR='\e[37;44m'
 declare -ri KEYS_MSG_Y=80
 declare -r KEYS_MSG="\e[$(( SCREEN_HEIGHT + 1));${KEYS_MSG_Y}f\e[37;44m   Keys:\e[$(( SCREEN_HEIGHT + 2 ));${KEYS_MSG_Y}f\e[33;44mq\e[37;44m - quit\e[$(( SCREEN_HEIGHT + 3 ));${KEYS_MSG_Y}f\e[33;44mWASD\e[37;44m - move & turn\e[$(( SCREEN_HEIGHT + 4 ));${KEYS_MSG_Y}f\e[33;44mf\e[37;44m - fire"
-declare -ri LIFE_BAR_INIT_POS="\e$(( SCREEN_HEIGHT + 3));40f"
+declare -r LIFEBAR_INIT_POS="\e[$(( SCREEN_HEIGHT + 2));25f"
+declare -r LIFE_CHAR="\e[37;41m  \e[37;44m "
+declare -r WEAPON_INIT_POS="\e[$(( SCREEN_HEIGHT + 5));25f"
+declare -r WEAPON_COLOR="\e[33;44m"
+declare -r KILLS_INIT_POS="\e[$(( SCREEN_HEIGHT + 2));50f"
+declare -r KILLS_COLOR="\e[31;44m"
 
-declare -ri LABIRINTH_WIDTH=20
-declare -ri LABIRINTH_HEIGHT=20
+declare -ri LABIRINTH_WIDTH=15
+declare -ri LABIRINTH_HEIGHT=15
 
 declare -r LAB_NOT_WALL_CHAR='\e[37;42m  '
 declare -r LAB_WALL_CHAR='\e[37;40m  '
@@ -192,6 +196,8 @@ declare -i playerX=5
 declare -i playerY=5
 declare -i playerDir=0
 declare -i playerLifes=5
+declare -i playerKills=0
+declare playerWeapon="BFG"
 declare action=
 
 declare -i monsterX=
@@ -209,9 +215,9 @@ declare -i shotSpeedCnt=0
 declare -ra DIR_X=(-1 0 1 0)
 declare -ra DIR_Y=(0 1 0 -1)
 
-declare -ra SHOT_CENTER_X=(30 25 22 19 16 14 12)                                      #(18 17 16 14 13 12 12)
+declare -ra SHOT_CENTER_X=(30 25 22 19 16 14 12 12)                                      #(18 17 16 14 13 12 12)
 declare -ri SHOT_CENTER_Y=$(( SCREEN_WIDTH / 2 ))
-declare -ra SHOT_RADIUS=(3 2 2 2 1 1 1)
+declare -ra SHOT_RADIUS=(3 2 2 2 1 1 1 0)
 
 declare -r LEFT_KEY='a'
 declare -r RIGHT_KEY='d'
@@ -225,6 +231,8 @@ declare -i -r DELAY=10
 declare -ri CEIL_BOTTOM=12
 
 declare -r TIMEOUT="0.05"
+
+declare -r REALTIME_MODE=false
 
 
 
@@ -287,6 +295,22 @@ DrawMinimap(){
     DrawPieceOfMap $(( playerX - MINIMAP_HALF_SIZE)) $(( playerY - MINIMAP_HALF_SIZE )) $MINIMAP_SIZE $MINIMAP_SIZE
 }
 
+DrawLifebar(){
+    local -a lifebar=()
+    for (( life=0; life < $playerLifes; ++life )); do
+        lifebar[$life]="${LIFE_CHAR}"
+    done
+    echo -ne "${LIFEBAR_INIT_POS}${INTERFACE_COLOR}LIFES: ${lifebar[*]}"
+}
+
+DrawWeapon(){
+    echo -ne "${WEAPON_INIT_POS}${INTERFACE_COLOR}WEAPON: ${WEAPON_COLOR}${playerWeapon}"
+}
+
+DrawKills(){
+    echo -ne "${KILLS_INIT_POS}${INTERFACE_COLOR}KILLS: ${KILLS_COLOR}${playerKills}"
+}
+
 DrawInterface(){
     local -a interface=()
     for (( x=0; x < $INTERFACE_HEIGHT; ++x )); do
@@ -298,6 +322,9 @@ DrawInterface(){
     done
     echo -ne "${INTERFACE_COLOR}${interface[*]}"
     DrawMinimap
+    DrawLifebar
+    DrawWeapon
+    DrawKills
     echo -ne "$KEYS_MSG"
 }
 
@@ -385,20 +412,23 @@ PrintScreen() {
 ##================================================================Game Logic Section=========================================================================
 
 GameOver(){
-    echo -e "\e[37;41m"
+    # echo -e "\e[37;41m"
     clear
     tput sgr0
     stty echo
-    echo -e "\e[?25h\e[15;15fGame over!"
-    break 2
+    IFS=$'\n\t '
+    echo -e "\e[?25hGame over!"
+    sleep 5
+    exit 0
 }
 
 QuitGame(){
     tput sgr0
     stty echo
     clear
+    IFS=$'\n\t '
     echo -e "\e[?25hThanks for playing!"
-    break 2
+    exit 0
 }
 
 MonsterAppear(){
@@ -422,11 +452,12 @@ MonsterAppear(){
 }
 
 KillMonster(){
+    let "++playerKills"
     MonsterAppear
 }
 
 MoveMonster(){
-    monsterSpeedCnt=$(( monsterSpeedCnt % monsterSpeed ))
+    monsterSpeedCnt=$(( (monsterSpeedCnt + 1) % monsterSpeed ))
     if [[ monsterSpeedCnt -ne 0 ]]; then
         return;
     fi
@@ -456,7 +487,7 @@ MoveMonster(){
 
 MoveShot(){
     if $shotExist; then
-        shotSpeedCnt=$(( shotSpeedCnt % shotSpeed ))
+        shotSpeedCnt=$(( (shotSpeedCnt + 1) % shotSpeed ))
         if [[ shotSpeedCnt -ne 0 ]]; then
             return;
         fi
@@ -478,6 +509,10 @@ MoveShot(){
         shotDir=$playerDir
         if CanGo $shotX $shotY; then
             shotExist=true
+            if [[ $monsterX -eq $shotX && $monsterY -eq $shotY ]]; then
+                KillMonster
+                shotExist=false
+            fi
         fi
     fi
 }
@@ -564,7 +599,11 @@ RunLevel() {
     action=
     while true; do
         key=""
-        read -t $TIMEOUT -n 1 key
+        if $REALTIME_MODE; then
+            read -t $TIMEOUT -n 1 key
+        else
+            read -n 1 key
+        fi
         case "$key" in
             $UP_KEY)	   action='moveForward';;
             $DOWN_KEY)	   action='moveBack';;
@@ -573,10 +612,10 @@ RunLevel() {
             $FIRE_KEY)     action='fire';;
             $NOACTION_KEY) action='noAction';;
             $QUIT_KEY)     action='quit';;
-            "")		;;
+            "")	           ;;
         esac
         newTime=$((`date +%s` * 100 + (10#`date +%N` / 10000000)))
-        if [[ $((newTime - time)) -ge DELAY ]]; then
+        # if [[ $((newTime - time)) -ge DELAY ]]; then
             MoveShot
             MoveMonster
             MovePlayer
@@ -585,7 +624,7 @@ RunLevel() {
             PrintScreen
             action=
             time=newTime
-        fi
+        # fi
     done
 }
 
@@ -605,6 +644,8 @@ IFS=""
 # echo -e "\033[?25l"
 
 clear
+
+trap `QuitGame` EXIT
 
 GenerateLabirinth 5 5
 
