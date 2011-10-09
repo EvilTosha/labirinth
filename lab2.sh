@@ -639,9 +639,9 @@ done
 
 IFS=""
 
-# stty -echo
+stty -echo
 # # Убирам курсор
-# echo -e "\033[?25l"
+echo -e "\033[?25l"
 
 clear
 
