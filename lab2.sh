@@ -162,35 +162,35 @@ declare -ri MAX_SCREEN_DEPTH=8
 declare -ri INTERFACE_HEIGHT=7
 declare -ri MINIMAP_SIZE=11
 declare -ri MINIMAP_HALF_SIZE=5
-declare -r MINIMAP_INIT_POS="\e[$(( SCREEN_HEIGHT - 4 ));0f"
-declare -r INTERFACE_COLOR='\e[37;44m'
+declare -r MINIMAP_INIT_POS="\033[$(( SCREEN_HEIGHT - 4 ));0f"
+declare -r INTERFACE_COLOR='\033[37;44m'
 declare -ri KEYS_MSG_Y=80
-declare -r KEYS_MSG="\e[$(( SCREEN_HEIGHT + 1));${KEYS_MSG_Y}f\e[37;44m   Keys:\e[$(( SCREEN_HEIGHT + 2 ));${KEYS_MSG_Y}f\e[33;44mq\e[37;44m - quit\e[$(( SCREEN_HEIGHT + 3 ));${KEYS_MSG_Y}f\e[33;44mWASD\e[37;44m - move & turn\e[$(( SCREEN_HEIGHT + 4 ));${KEYS_MSG_Y}f\e[33;44mf\e[37;44m - fire"
-declare -r LIFEBAR_INIT_POS="\e[$(( SCREEN_HEIGHT + 2));25f"
-declare -r LIFE_CHAR="\e[37;41m  \e[37;44m "
-declare -r WEAPON_INIT_POS="\e[$(( SCREEN_HEIGHT + 5));25f"
-declare -r WEAPON_COLOR="\e[33;44m"
-declare -r KILLS_INIT_POS="\e[$(( SCREEN_HEIGHT + 2));50f"
-declare -r KILLS_COLOR="\e[31;44m"
+declare -r KEYS_MSG="\033[$(( SCREEN_HEIGHT + 1));${KEYS_MSG_Y}f\033[37;44m   Keys:\033[$(( SCREEN_HEIGHT + 2 ));${KEYS_MSG_Y}f\033[33;44mq\033[37;44m - quit\033[$(( SCREEN_HEIGHT + 3 ));${KEYS_MSG_Y}f\033[33;44mWASD\033[37;44m - move & turn\033[$(( SCREEN_HEIGHT + 4 ));${KEYS_MSG_Y}f\033[33;44mf\033[37;44m - fire"
+declare -r LIFEBAR_INIT_POS="\033[$(( SCREEN_HEIGHT + 2));25f"
+declare -r LIFE_CHAR="\033[37;41m  \033[37;44m "
+declare -r WEAPON_INIT_POS="\033[$(( SCREEN_HEIGHT + 5));25f"
+declare -r WEAPON_COLOR="\033[33;44m"
+declare -r KILLS_INIT_POS="\033[$(( SCREEN_HEIGHT + 2));50f"
+declare -r KILLS_COLOR="\033[31;44m"
 
 declare -ri LABIRINTH_WIDTH=15
 declare -ri LABIRINTH_HEIGHT=15
 
-declare -r LAB_NOT_WALL_CHAR='\e[37;42m  '
-declare -r LAB_WALL_CHAR='\e[37;40m  '
-declare -r LAB_PLAYER_LEFT_CHAR='\e[31;42m< '
-declare -r LAB_PLAYER_RIGHT_CHAR='\e[31;42m >'
-declare -r LAB_PLAYER_UP_CHAR='\e[31;42m/\\'
-declare -r LAB_PLAYER_DOWN_CHAR='\e[31;42m\\/'
-declare -r LAB_MONSTER_CHAR='\e[31;42m@@'
-declare -r LAB_SHOT_CHAR='\e[34;42mo0'
+declare -r LAB_NOT_WALL_CHAR='\033[37;42m  '
+declare -r LAB_WALL_CHAR='\033[37;40m  '
+declare -r LAB_PLAYER_LEFT_CHAR='\033[31;42m< '
+declare -r LAB_PLAYER_RIGHT_CHAR='\033[31;42m >'
+declare -r LAB_PLAYER_UP_CHAR='\033[31;42m/\\'
+declare -r LAB_PLAYER_DOWN_CHAR='\033[31;42m\\/'
+declare -r LAB_MONSTER_CHAR='\033[31;42m@@'
+declare -r LAB_SHOT_CHAR='\033[34;42mo0'
 
-declare -r MONSTER_CHAR='\e[37;41m '
-declare -r SIDE_WALL_CHAR='\e[37;45m '
-declare -r FRONT_WALL_CHAR='\e[37;43m '
-declare -r CEIL_CHAR='\e[37;40m '
-declare -r FLOOR_CHAR='\e[37;40m '
-declare -r SHOT_CHAR='\e[37;46m '
+declare -r MONSTER_CHAR='\033[37;41m '
+declare -r SIDE_WALL_CHAR='\033[37;45m '
+declare -r FRONT_WALL_CHAR='\033[37;43m '
+declare -r CEIL_CHAR='\033[37;40m '
+declare -r FLOOR_CHAR='\033[37;40m '
+declare -r SHOT_CHAR='\033[37;46m '
 
 declare -i playerX=5
 declare -i playerY=5
@@ -337,7 +337,7 @@ PrintScreen() {
     local -i frontWall=$MAX_SCREEN_DEPTH
     local -i monsterPos=$MAX_SCREEN_DEPTH
     local -i shotPos=$MAX_SCREEN_DEPTH
-    echo -ne '\e[0;0f'
+    echo -ne '\033[0;0f'
     for (( i=0; i < 8; ++i )); do
         x=$(( playerX + i * DIR_X[playerDir] ))
         y=$(( playerY + i * DIR_Y[playerDir] ))
@@ -412,12 +412,12 @@ PrintScreen() {
 ##================================================================Game Logic Section=========================================================================
 
 GameOver(){
-    # echo -e "\e[37;41m"
+    # echo -e "\033[37;41m"
     clear
     tput sgr0
     stty echo
     IFS=$'\n\t '
-    echo -e "\e[?25hGame over!"
+    echo -e "\033[?25hGame over!"
     sleep 5
     exit 0
 }
@@ -427,7 +427,7 @@ QuitGame(){
     stty echo
     clear
     IFS=$'\n\t '
-    echo -e "\e[?25hThanks for playing!"
+    echo -e "\033[?25hThanks for playing!"
     exit 0
 }
 
@@ -593,9 +593,9 @@ GenerateLabirinth() {
 
 
 RunLevel() {
-    local -l key
-    local -i time=0
-    local -i newTime
+    local key
+    #local -i time=0
+    #local -i newTime
     action=
     while true; do
         key=""
@@ -614,7 +614,8 @@ RunLevel() {
             $QUIT_KEY)     action='quit';;
             "")	           ;;
         esac
-        newTime=$((`date +%s` * 100 + (10#`date +%N` / 10000000)))
+
+        #newTime=$((`date +%s` * 100 + (10#`echo 'puts [clock clicks -microseconds]' | tclsh` / 10000)))
         # if [[ $((newTime - time)) -ge DELAY ]]; then
             MoveShot
             MoveMonster
@@ -623,7 +624,7 @@ RunLevel() {
             [[ $playerX -eq $monsterX && $playerY -eq $monsterY ]] && GameOver
             PrintScreen
             action=
-            time=newTime
+            #time=newTime
         # fi
     done
 }
