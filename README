@@ -1,0 +1,4 @@
+Shooter/dungeon game with pseudo-3D(ASCII) graphic wrote on bash. 
+Explore the labirinth, shoot monsters!
+To run the game, just run lab2.sh in your console (exec rights required). Tested on MAC.
+Note: cpp file isn't used in game process, it was made for generating screens in beginning of sh file.
