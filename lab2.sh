@@ -300,7 +300,7 @@ DrawLifebar(){
     for (( life=0; life < $playerLifes; ++life )); do
         lifebar[$life]="${LIFE_CHAR}"
     done
-    echo -ne "${LIFEBAR_INIT_POS}${INTERFACE_COLOR}LIFES: ${lifebar[*]}"
+    echo -ne "${LIFEBAR_INIT_POS}${INTERFACE_COLOR}LIVES: ${lifebar[*]}"
 }
 
 DrawWeapon(){
