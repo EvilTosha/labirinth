@@ -195,7 +195,7 @@ declare -r SHOT_CHAR='\033[37;46m '
 declare -i playerX=5
 declare -i playerY=5
 declare -i playerDir=0
-declare -i playerLifes=5
+declare -i playerLives=5
 declare -i playerKills=0
 declare playerWeapon="BFG"
 declare action=
@@ -297,7 +297,7 @@ DrawMinimap(){
 
 DrawLifebar(){
     local -a lifebar=()
-    for (( life=0; life < $playerLifes; ++life )); do
+    for (( life=0; life < $playerLives; ++life )); do
         lifebar[$life]="${LIFE_CHAR}"
     done
     echo -ne "${LIFEBAR_INIT_POS}${INTERFACE_COLOR}LIVES: ${lifebar[*]}"
